@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>九九練習アプリ（6, 7, 8の段）</title>
+    <!-- Tailwind CSSを読み込み -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#4f46e5',
+                        secondary: '#10b981',
+                        background: '#f8fafc',
+                        card: '#ffffff',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* カスタムスタイル */
+        body {
+            background-color: theme('colors.background');
+        }
+        .container {
+            max-width: 500px;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield; /* Firefoxで矢印を非表示にする */
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none; /* Chrome, Safariで矢印を非表示にする */
+            margin: 0;
+        }
+        /* 最高記録更新時のアニメーション */
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(253, 224, 71, 0.7), 0 0 20px rgba(253, 224, 71, 0.5);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(253, 224, 71, 1), 0 0 40px rgba(253, 224, 71, 0.8);
+            }
+        }
+        .animate-pulse-strong {
+            animation: pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="p-4 flex items-center justify-center min-h-screen">
+
+    <div id="app" class="container bg-card shadow-2xl rounded-xl p-6 md:p-8 w-full">
+        <h1 class="text-3xl font-bold text-center text-primary mb-6">
+            九九トレーニング (6, 7, 8の段)
+        </h1>
+        <p class="text-center text-gray-600 mb-6">
+            全5問。6の段、7の段、8の段からランダムに出題されます。
+        </p>
+
+        <!-- 最高記録表示エリア (初期状態から表示) -->
+        <div class="text-center mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+            <p class="text-sm font-semibold text-gray-600">最高記録 (最短時間):</p>
+            <p id="bestTimeText" class="text-2xl font-extrabold text-indigo-700">---</p>
+        </div>
+
+        <!-- スタートボタン -->
+        <button id="startButton" class="w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out shadow-lg transform hover:scale-[1.01]">
+            <svg class="w-5 h-5 inline mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.26c0 .779.824 1.257 1.403.872l3.197-2.132a1 1 0 000-1.744z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            トレーニング開始
+        </button>
+
+        <!-- 問題表示エリア -->
+        <div id="quizArea" class="hidden mt-8 space-y-4">
+            <h2 class="text-xl font-semibold text-gray-800 border-b pb-2 mb-4">問題</h2>
+            <div id="questionsContainer" class="space-y-4">
+                <!-- 問題はJavaScriptで挿入される -->
+            </div>
+            
+            <!-- 答え合わせボタン -->
+            <button id="submitButton" class="w-full bg-primary hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg mt-6 transition duration-150 ease-in-out shadow-lg">
+                答え合わせ
+            </button>
+        </div>
+
+        <!-- 結果表示エリア -->
+        <div id="resultArea" class="hidden mt-8 bg-indigo-50 p-6 rounded-lg border-2 border-indigo-200">
+            <h2 class="text-2xl font-bold text-primary mb-4 text-center">結果</h2>
+            
+            <!-- 経過時間表示 -->
+            <p class="text-lg font-medium text-gray-700 text-center">経過時間:</p>
+            <p id="timeText" class="text-4xl font-extrabold text-primary mb-4 text-center">0.00秒</p>
+
+            <!-- 最高記録更新メッセージ -->
+            <div id="celebrationMessage" class="hidden text-center mb-6 p-4 bg-yellow-100 border-4 border-yellow-400 rounded-xl shadow-xl animate-pulse-strong">
+                <p class="text-2xl font-black text-yellow-700">🏆✨ 最高記録更新！おめでとう！ ✨🏆</p>
+            </div>
+
+            <p id="scoreText" class="text-xl text-center font-extrabold mb-4"></p>
+            
+            <h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-4 mb-3">詳細</h3>
+            <div id="summaryContainer" class="space-y-3">
+                <!-- 個別の結果はJavaScriptで挿入される -->
+            </div>
+            
+            <button id="resetButton" class="w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg mt-6 transition duration-150 ease-in-out shadow-lg">
+                もう一度挑戦する
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase SDKsのインポートとアプリロジック -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // グローバル変数
+        const QUESTION_COUNT = 5; // 出題数
+        let questions = [];      // 出題リストを格納
+        let currentAnswers = []; // ユーザーの解答を格納
+        let startTime = 0;       // 計測開始時刻 (ms)
+
+        // Firestore/Auth 関連
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        let bestTimeMs = Infinity; // 最高記録（ミリ秒, 初期値は無限大）
+
+        // DOM要素の取得
+        const startButton = document.getElementById('startButton');
+        const quizArea = document.getElementById('quizArea');
+        const resultArea = document.getElementById('resultArea');
+        const questionsContainer = document.getElementById('questionsContainer');
+        const submitButton = document.getElementById('submitButton');
+        const scoreText = document.getElementById('scoreText');
+        const summaryContainer = document.getElementById('summaryContainer');
+        const resetButton = document.getElementById('resetButton');
+        
+        // タイム計測関連のDOM要素
+        const timeText = document.getElementById('timeText');
+        const bestTimeText = document.getElementById('bestTimeText');
+        const celebrationMessage = document.getElementById('celebrationMessage');
+
+
+        // --- Firebase/Firestore 関連関数 ---
+
+        /**
+         * Firebaseの初期化と認証を行う
+         */
+        async function initFirebaseAndAuth() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                if (token) {
+                    await signInWithCustomToken(auth, token);
+                } else {
+                    // __initial_auth_tokenがない場合は匿名認証
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                        loadHighScore(); // 認証完了後に最高記録をロード
+                    } else {
+                        // 匿名認証に失敗した場合のフォールバック
+                        userId = null;
+                        isAuthReady = true;
+                        loadHighScore(); 
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase Initialization or Authentication Error:", error);
+                isAuthReady = true;
+                // エラーが発生した場合でも、一応ローカルでアプリを使えるようにするため
+                loadHighScore();
+            }
+        }
+
+        /**
+         * Firestoreから最高記録（最短時間）を取得する
+         */
+        async function loadHighScore() {
+            if (!isAuthReady || !userId) {
+                console.warn("Auth not ready or User ID not available for loading high score.");
+                updateBestTimeDisplay();
+                return;
+            }
+
+            // プライベートデータパス: /artifacts/{appId}/users/{userId}/highscores/multiplication_best_time
+            const docPath = `/artifacts/${appId}/users/${userId}/highscores/multiplication_best_time`;
+            const docRef = doc(db, docPath);
+
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // data.bestTimeが数値型であることを確認
+                    if (data.bestTime && typeof data.bestTime === 'number') {
+                        bestTimeMs = data.bestTime;
+                        console.log("Loaded Best Time:", bestTimeMs);
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading high score:", e);
+            }
+            updateBestTimeDisplay();
+        }
+
+        /**
+         * Firestoreに最高記録（最短時間）を保存する
+         * @param {number} newBestTimeMs 新しい最高記録（ミリ秒）
+         */
+        async function saveHighScore(newBestTimeMs) {
+            if (!isAuthReady || !userId) {
+                console.warn("Auth not ready or User ID not available for saving high score.");
+                return;
+            }
+
+            const docPath = `/artifacts/${appId}/users/${userId}/highscores/multiplication_best_time`;
+            const docRef = doc(db, docPath);
+
+            try {
+                // setDocでデータを保存/上書き
+                await setDoc(docRef, { bestTime: newBestTimeMs, updatedAt: Date.now() });
+                bestTimeMs = newBestTimeMs;
+                console.log("High Score saved successfully:", newBestTimeMs);
+                updateBestTimeDisplay();
+            } catch (e) {
+                console.error("Error saving high score:", e);
+            }
+        }
+
+        /**
+         * 最高記録の表示を更新する
+         */
+        function updateBestTimeDisplay() {
+            if (bestTimeMs !== Infinity) {
+                const seconds = (bestTimeMs / 1000).toFixed(2);
+                bestTimeText.textContent = `${seconds}秒`;
+            } else {
+                bestTimeText.textContent = '未登録';
+            }
+        }
+
+        // --- 九九アプリロジック（既存関数と新規関数） ---
+
+        /**
+         * 6, 7, 8の段の九九の問題をランダムに生成する
+         */
+        function generateQuestions() {
+            const problems = [];
+            const multipliers = [6, 7, 8];
+            
+            for (let i = 0; i < QUESTION_COUNT; i++) {
+                const multiplierIndex = Math.floor(Math.random() * multipliers.length);
+                const multiplier = multipliers[multiplierIndex];
+                const multiplicand = Math.floor(Math.random() * 9) + 1;
+                
+                problems.push({
+                    q: `${multiplier} × ${multiplicand} =`,
+                    answer: multiplier * multiplicand
+                });
+            }
+            return problems;
+        }
+
+        /**
+         * 問題を画面にレンダリングする
+         */
+        function renderQuestions() {
+            questionsContainer.innerHTML = '';
+            currentAnswers = Array(questions.length).fill(null);
+
+            questions.forEach((q, index) => {
+                const questionElement = document.createElement('div');
+                questionElement.className = 'flex items-center space-x-4 bg-gray-50 p-4 rounded-lg shadow-sm';
+                questionElement.innerHTML = `
+                    <p class="text-lg font-medium w-1/3 text-gray-700">${index + 1}. ${q.q}</p>
+                    <input type="number" id="answer-${index}" data-index="${index}" placeholder="答え"
+                           class="answer-input w-2/3 p-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary text-lg text-center font-mono">
+                `;
+                questionsContainer.appendChild(questionElement);
+            });
+            
+            // 入力イベントリスナーを設定
+            document.querySelectorAll('.answer-input').forEach(input => {
+                input.addEventListener('input', handleAnswerInput);
+            });
+        }
+
+        /**
+         * ユーザーの解答を入力時に保存するハンドラ
+         */
+        function handleAnswerInput(event) {
+            const input = event.target;
+            const index = parseInt(input.dataset.index);
+            // 数値としてパース。空文字の場合はnullを格納
+            currentAnswers[index] = input.value === '' ? null : parseInt(input.value);
+        }
+
+        /**
+         * 答え合わせ処理
+         */
+        async function checkAnswers() {
+            const endTime = Date.now();
+            const elapsedTime = endTime - startTime; // 経過時間（ミリ秒）
+            let correctCount = 0;
+            summaryContainer.innerHTML = '';
+            celebrationMessage.classList.add('hidden'); // メッセージをリセット
+
+            // 1. 正誤判定と結果サマリーの生成
+            questions.forEach((q, index) => {
+                const userAnswer = currentAnswers[index];
+                const isCorrect = userAnswer === q.answer;
+                
+                if (isCorrect) {
+                    correctCount++;
+                }
+
+                // 結果サマリーの表示
+                const summaryItem = document.createElement('div');
+                summaryItem.className = `p-3 rounded-lg flex justify-between items-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`;
+                
+                const icon = isCorrect 
+                    ? `<svg class="w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
+                    : `<svg class="w-6 h-6 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+
+                const detailText = isCorrect
+                    ? `正解！`
+                    : `間違い... 正解は ${q.answer}`;
+
+                const resultClass = isCorrect ? 'text-green-800' : 'text-red-800';
+
+                summaryItem.innerHTML = `
+                    <div class="flex items-center">
+                        <div class="mr-3">${icon}</div>
+                        <p class="font-semibold text-gray-800">${index + 1}. ${q.q}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm text-gray-600">あなたの答え: <span class="font-mono ${userAnswer === null ? 'text-gray-400' : 'font-bold'}">${userAnswer !== null ? userAnswer : '未入力'}</span></p>
+                        <p class="font-bold ${resultClass}">${detailText}</p>
+                    </div>
+                `;
+                summaryContainer.appendChild(summaryItem);
+            });
+
+            // 2. スコアとタイムの表示
+            scoreText.textContent = `${QUESTION_COUNT}問中、${correctCount}問正解！`;
+            scoreText.className = `text-xl text-center font-extrabold mb-4 ${correctCount === QUESTION_COUNT ? 'text-secondary' : 'text-primary'}`;
+            
+            // タイム表示
+            const elapsedSeconds = (elapsedTime / 1000).toFixed(2);
+            timeText.textContent = `${elapsedSeconds}秒`;
+
+
+            // 3. 最高記録の更新チェック (全問正解かつ、現在のタイムが最高記録よりも速い場合)
+            if (correctCount === QUESTION_COUNT && elapsedTime < bestTimeMs) {
+                // 最高記録更新！
+                celebrationMessage.classList.remove('hidden');
+                await saveHighScore(elapsedTime); // Firestoreに保存
+            }
+
+            // 4. 画面切り替え
+            quizArea.classList.add('hidden');
+            resultArea.classList.remove('hidden');
+        }
+
+        /**
+         * アプリを初期状態に戻す
+         */
+        function resetApp() {
+            // 画面切り替え
+            startButton.classList.remove('hidden');
+            quizArea.classList.add('hidden');
+            resultArea.classList.add('hidden');
+            questionsContainer.innerHTML = '';
+            summaryContainer.innerHTML = '';
+            celebrationMessage.classList.add('hidden');
+            timeText.textContent = '0.00秒'; // タイム表示をリセット
+
+            updateBestTimeDisplay(); // 最高記録を再表示
+        }
+
+
+        // --- イベントリスナー ---
+
+        startButton.addEventListener('click', () => {
+            questions = generateQuestions(); // 問題を生成
+            renderQuestions();                // 問題をレンダリング
+            startTime = Date.now();           // タイマーをスタート
+
+            // 画面切り替え
+            startButton.classList.add('hidden');
+            quizArea.classList.remove('hidden');
+            resultArea.classList.add('hidden');
+        });
+
+        submitButton.addEventListener('click', checkAnswers);
+
+        resetButton.addEventListener('click', resetApp);
+        
+        // アプリ起動時の初期化
+        initFirebaseAndAuth(); // Firebaseの初期化と認証を開始
+        resetApp(); // UIを初期状態にする
+
+    </script>
+</body>
+</html>
