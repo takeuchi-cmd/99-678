@@ -62,11 +62,25 @@
         <p class="text-center text-gray-600 mb-6">
             全5問。6の段、7の段、8の段からランダムに出題されます。
         </p>
+        
+        <!-- ハンドルネーム入力エリア -->
+        <div id="nameInputArea" class="mb-6 p-4 bg-gray-100 rounded-lg shadow-inner">
+            <p class="text-sm font-semibold text-gray-700 mb-2">ハンドルネームを登録してください:</p>
+            <div class="flex space-x-2">
+                <input type="text" id="nicknameInput" maxlength="12" placeholder="ニックネーム (12文字以内)"
+                       class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                <button id="registerButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out shadow-md">
+                    登録
+                </button>
+            </div>
+            <p id="nicknameDisplay" class="text-center mt-2 text-indigo-700 font-bold hidden"></p>
+        </div>
 
         <!-- 最高記録表示エリア (初期状態から表示) -->
         <div class="text-center mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
             <p class="text-sm font-semibold text-gray-600">最高記録 (最短時間):</p>
             <p id="bestTimeText" class="text-2xl font-extrabold text-indigo-700">---</p>
+            <p id="bestTimeOwner" class="text-base text-indigo-500 mt-1">プレイヤー: ---</p>
         </div>
 
         <!-- スタートボタン -->
@@ -112,7 +126,35 @@
                 もう一度挑戦する
             </button>
         </div>
+        
+        <!-- リセットボタンと確認モーダル -->
+        <div class="mt-8 pt-4 border-t border-gray-200">
+            <button id="showResetModalButton" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out shadow-md">
+                全データ初期化 (パスワード要)
+            </button>
+        </div>
+
     </div>
+
+    <!-- パスワード確認モーダル (簡易版) -->
+    <div id="resetModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-xs">
+            <h3 class="text-lg font-bold mb-4 text-red-600">⚠ データ初期化</h3>
+            <p class="mb-4 text-sm text-gray-700">最高記録とニックネームをすべて初期化します。操作を続けるには**パスワード**を入力してください。</p>
+            <input type="password" id="resetPasswordInput" placeholder="パスワードを入力"
+                   class="w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 mb-2">
+            <p id="resetErrorMessage" class="text-sm text-red-500 mb-4 hidden">パスワードが違います。</p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelResetButton" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                    キャンセル
+                </button>
+                <button id="confirmResetButton" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                    実行
+                </button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Firebase SDKsのインポートとアプリロジック -->
     <script type="module">
@@ -125,6 +167,7 @@
         let questions = [];      // 出題リストを格納
         let currentAnswers = []; // ユーザーの解答を格納
         let startTime = 0;       // 計測開始時刻 (ms)
+        let currentNickname = "名無し"; // 現在のユーザーのニックネーム
 
         // Firestore/Auth 関連
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -133,6 +176,7 @@
         let userId = null;
         let isAuthReady = false;
         let bestTimeMs = Infinity; // 最高記録（ミリ秒, 初期値は無限大）
+        let bestTimeOwnerNickname = "未登録"; // 最高記録保持者のニックネーム
 
         // DOM要素の取得
         const startButton = document.getElementById('startButton');
@@ -148,6 +192,20 @@
         const timeText = document.getElementById('timeText');
         const bestTimeText = document.getElementById('bestTimeText');
         const celebrationMessage = document.getElementById('celebrationMessage');
+
+        // ニックネーム関連のDOM要素
+        const nicknameInput = document.getElementById('nicknameInput');
+        const registerButton = document.getElementById('registerButton');
+        const nicknameDisplay = document.getElementById('nicknameDisplay');
+        const bestTimeOwner = document.getElementById('bestTimeOwner');
+        
+        // リセット機能関連のDOM要素 (新規追加)
+        const showResetModalButton = document.getElementById('showResetModalButton');
+        const resetModal = document.getElementById('resetModal');
+        const resetPasswordInput = document.getElementById('resetPasswordInput');
+        const cancelResetButton = document.getElementById('cancelResetButton');
+        const confirmResetButton = document.getElementById('confirmResetButton');
+        const resetErrorMessage = document.getElementById('resetErrorMessage');
 
 
         // --- Firebase/Firestore 関連関数 ---
@@ -175,74 +233,197 @@
                         userId = user.uid;
                         isAuthReady = true;
                         console.log("Firebase Auth Ready. User ID:", userId);
-                        loadHighScore(); // 認証完了後に最高記録をロード
+                        loadUserData(); // 認証完了後にユーザーデータと最高記録をロード
                     } else {
                         // 匿名認証に失敗した場合のフォールバック
                         userId = null;
                         isAuthReady = true;
-                        loadHighScore(); 
+                        loadUserData(); 
                     }
                 });
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
                 isAuthReady = true;
-                // エラーが発生した場合でも、一応ローカルでアプリを使えるようにするため
-                loadHighScore();
+                loadUserData();
             }
         }
 
         /**
-         * Firestoreから最高記録（最短時間）を取得する
+         * ユーザーデータ (ニックネーム) と最高記録をロードする
          */
-        async function loadHighScore() {
+        async function loadUserData() {
             if (!isAuthReady || !userId) {
-                console.warn("Auth not ready or User ID not available for loading high score.");
+                updateNicknameDisplay();
                 updateBestTimeDisplay();
                 return;
             }
 
-            // プライベートデータパス: /artifacts/{appId}/users/{userId}/highscores/multiplication_best_time
-            const docPath = `/artifacts/${appId}/users/${userId}/highscores/multiplication_best_time`;
+            // ユーザーデータ (ニックネーム) のロード
+            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
+            const userDocRef = doc(db, userDocPath);
+            try {
+                const docSnap = await getDoc(userDocRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.nickname) {
+                        currentNickname = data.nickname;
+                        console.log("Loaded Nickname:", currentNickname);
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading user profile:", e);
+            }
+            updateNicknameDisplay();
+
+            // 最高記録のロード (Firestoreでは全ユーザーの最高記録を単一の場所に保存し、ロードします)
+            loadHighScore();
+        }
+
+        /**
+         * Firestoreから全ユーザーの最高記録（最短時間）を取得する
+         */
+        async function loadHighScore() {
+            // パブリックデータパス: /artifacts/{appId}/public/data/multiplication_best_time/record
+            const docPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
             const docRef = doc(db, docPath);
 
             try {
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // data.bestTimeが数値型であることを確認
                     if (data.bestTime && typeof data.bestTime === 'number') {
                         bestTimeMs = data.bestTime;
-                        console.log("Loaded Best Time:", bestTimeMs);
+                        bestTimeOwnerNickname = data.nickname || "名無し";
+                        console.log("Loaded Global Best Time:", bestTimeMs, "Owner:", bestTimeOwnerNickname);
                     }
                 }
             } catch (e) {
-                console.error("Error loading high score:", e);
+                console.error("Error loading global high score:", e);
             }
             updateBestTimeDisplay();
         }
 
         /**
-         * Firestoreに最高記録（最短時間）を保存する
+         * Firestoreに最高記録（最短時間）とニックネームを保存する
          * @param {number} newBestTimeMs 新しい最高記録（ミリ秒）
+         * @param {string} nickname 記録を達成したユーザーのニックネーム
          */
-        async function saveHighScore(newBestTimeMs) {
+        async function saveHighScore(newBestTimeMs, nickname) {
             if (!isAuthReady || !userId) {
                 console.warn("Auth not ready or User ID not available for saving high score.");
                 return;
             }
 
-            const docPath = `/artifacts/${appId}/users/${userId}/highscores/multiplication_best_time`;
+            // 全ユーザー共有の最高記録として保存
+            const docPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
             const docRef = doc(db, docPath);
 
             try {
-                // setDocでデータを保存/上書き
-                await setDoc(docRef, { bestTime: newBestTimeMs, updatedAt: Date.now() });
+                await setDoc(docRef, { 
+                    bestTime: newBestTimeMs, 
+                    nickname: nickname, // ニックネームを保存
+                    userId: userId,     // 誰が達成したかも保存（オプション）
+                    updatedAt: Date.now() 
+                });
                 bestTimeMs = newBestTimeMs;
-                console.log("High Score saved successfully:", newBestTimeMs);
+                bestTimeOwnerNickname = nickname;
+                console.log("Global High Score saved successfully:", newBestTimeMs, "by", nickname);
                 updateBestTimeDisplay();
             } catch (e) {
                 console.error("Error saving high score:", e);
+            }
+        }
+        
+        /**
+         * Firestoreに現在のユーザーのニックネームを保存する
+         * @param {string} nickname 登録するニックネーム
+         */
+        async function saveNickname(nickname) {
+            if (!isAuthReady || !userId) {
+                console.warn("Auth not ready. Cannot save nickname.");
+                return;
+            }
+            
+            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
+            const userDocRef = doc(db, userDocPath);
+
+            try {
+                await setDoc(userDocRef, { nickname: nickname, updatedAt: Date.now() });
+                currentNickname = nickname;
+                updateNicknameDisplay();
+                console.log("Nickname saved:", nickname);
+            } catch (e) {
+                console.error("Error saving nickname:", e);
+            }
+        }
+
+        /**
+         * すべての登録者（最高記録）と個人のニックネームを初期化する
+         */
+        async function resetAllData() {
+            if (!isAuthReady || !userId) {
+                console.error("Auth not ready. Cannot reset data.");
+                return;
+            }
+
+            // 1. グローバルな最高記録を初期化
+            const globalDocPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
+            const globalDocRef = doc(db, globalDocPath);
+
+            try {
+                await setDoc(globalDocRef, { 
+                    bestTime: Infinity, 
+                    nickname: "未登録", 
+                    userId: null, 
+                    updatedAt: Date.now() 
+                });
+                console.log("Global High Score reset successfully.");
+            } catch (e) {
+                console.error("Error resetting global high score:", e);
+            }
+
+            // 2. 現在のユーザーのニックネームを初期化
+            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
+            const userDocRef = doc(db, userDocPath);
+
+            try {
+                // ニックネームを初期値 ("名無し") で上書き
+                await setDoc(userDocRef, { nickname: "名無し", updatedAt: Date.now() });
+                currentNickname = "名無し";
+                console.log("Current user nickname reset successfully.");
+            } catch (e) {
+                console.error("Error resetting user nickname:", e);
+            }
+            
+            // 3. UIの状態をリセット
+            resetModal.classList.add('hidden');
+            resetPasswordInput.value = '';
+            
+            // 4. UI/データを再ロードして更新を反映
+            bestTimeMs = Infinity;
+            bestTimeOwnerNickname = "未登録";
+            resetApp(); 
+            // サーバーからのデータを再ロード
+            loadUserData();
+        }
+
+
+        // --- UI 更新関数 ---
+
+        /**
+         * ニックネーム入力/表示を更新する
+         */
+        function updateNicknameDisplay() {
+            if (currentNickname === "名無し" || currentNickname === null) {
+                nicknameDisplay.classList.add('hidden');
+                registerButton.textContent = '登録';
+                nicknameInput.value = '';
+            } else {
+                nicknameDisplay.textContent = `現在のプレイヤー: ${currentNickname}`;
+                nicknameDisplay.classList.remove('hidden');
+                nicknameInput.value = currentNickname;
+                registerButton.textContent = '更新';
             }
         }
 
@@ -253,29 +434,50 @@
             if (bestTimeMs !== Infinity) {
                 const seconds = (bestTimeMs / 1000).toFixed(2);
                 bestTimeText.textContent = `${seconds}秒`;
+                bestTimeOwner.textContent = `プレイヤー: ${bestTimeOwnerNickname}`;
             } else {
                 bestTimeText.textContent = '未登録';
+                bestTimeOwner.textContent = 'プレイヤー: ---';
             }
         }
+
 
         // --- 九九アプリロジック（既存関数と新規関数） ---
 
         /**
-         * 6, 7, 8の段の九九の問題をランダムに生成する
+         * 6, 7, 8の段の九九の問題をランダムに生成する (重複なし)
          */
         function generateQuestions() {
             const problems = [];
             const multipliers = [6, 7, 8];
+            const generatedKeys = new Set(); // 既に生成された問題を格納するSet (例: "6x5", "7x1")
             
-            for (let i = 0; i < QUESTION_COUNT; i++) {
+            while (problems.length < QUESTION_COUNT) {
+                // 段（6, 7, 8）をランダムに選択
                 const multiplierIndex = Math.floor(Math.random() * multipliers.length);
                 const multiplier = multipliers[multiplierIndex];
+
+                // かける数（1から9）をランダムに選択
                 const multiplicand = Math.floor(Math.random() * 9) + 1;
+
+                const key = `${multiplier}x${multiplicand}`;
                 
-                problems.push({
-                    q: `${multiplier} × ${multiplicand} =`,
-                    answer: multiplier * multiplicand
-                });
+                // 重複チェック
+                if (!generatedKeys.has(key)) {
+                    generatedKeys.add(key);
+                    
+                    problems.push({
+                        q: `${multiplier} × ${multiplicand} =`,
+                        answer: multiplier * multiplicand
+                    });
+                }
+                
+                // 念のため、全問題数が少ない場合（3段 x 9 = 27通り）の無限ループ防止策
+                // 5問なので、通常は問題ないが、念のため
+                if (generatedKeys.size === multipliers.length * 9 && problems.length < QUESTION_COUNT) {
+                     // 全ての問題パターンが出たが、問題数がまだ満たされていない場合（ありえないが安全策として）
+                    break;
+                }
             }
             return problems;
         }
@@ -373,7 +575,8 @@
             if (correctCount === QUESTION_COUNT && elapsedTime < bestTimeMs) {
                 // 最高記録更新！
                 celebrationMessage.classList.remove('hidden');
-                await saveHighScore(elapsedTime); // Firestoreに保存
+                // 登録されたニックネームを付けて保存
+                await saveHighScore(elapsedTime, currentNickname); 
             }
 
             // 4. 画面切り替え
@@ -395,6 +598,7 @@
             timeText.textContent = '0.00秒'; // タイム表示をリセット
 
             updateBestTimeDisplay(); // 最高記録を再表示
+            updateNicknameDisplay(); // ニックネームを再表示
         }
 
 
@@ -415,6 +619,39 @@
 
         resetButton.addEventListener('click', resetApp);
         
+        registerButton.addEventListener('click', () => {
+            const nickname = nicknameInput.value.trim();
+            if (nickname.length > 0) {
+                saveNickname(nickname);
+            } else {
+                console.error("ニックネームを入力してください。");
+            }
+        });
+        
+        // リセット機能のイベントリスナー
+        showResetModalButton.addEventListener('click', () => {
+            resetModal.classList.remove('hidden');
+            resetPasswordInput.focus();
+        });
+
+        cancelResetButton.addEventListener('click', () => {
+            resetModal.classList.add('hidden');
+            resetPasswordInput.value = '';
+            resetErrorMessage.classList.add('hidden');
+        });
+
+        confirmResetButton.addEventListener('click', () => {
+            const password = resetPasswordInput.value;
+            resetErrorMessage.classList.add('hidden'); // エラーメッセージをリセット
+            if (password === 'shinai') {
+                resetAllData();
+            } else {
+                resetErrorMessage.classList.remove('hidden'); // エラーメッセージを表示
+                resetPasswordInput.value = ''; // パスワードをクリア
+            }
+        });
+
+
         // アプリ起動時の初期化
         initFirebaseAndAuth(); // Firebaseの初期化と認証を開始
         resetApp(); // UIを初期状態にする
