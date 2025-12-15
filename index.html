@@ -3,659 +3,700 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>九九練習アプリ（6, 7, 8の段）</title>
-    <!-- Tailwind CSSを読み込み -->
+    <title>めざせ！九九マスター 6・7・8の段チャレンジ</title>
+    <!-- Tailwind CSS CDNを読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
-                    },
-                    colors: {
-                        primary: '#4f46e5',
-                        secondary: '#10b981',
-                        background: '#f8fafc',
-                        card: '#ffffff',
-                    }
-                }
-            }
-        }
-    </script>
     <style>
         /* カスタムスタイル */
         body {
-            background-color: theme('colors.background');
-        }
-        .container {
-            max-width: 500px;
-        }
-        input[type="number"] {
-            -moz-appearance: textfield; /* Firefoxで矢印を非表示にする */
-        }
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none; /* Chrome, Safariで矢印を非表示にする */
-            margin: 0;
-        }
-        /* 最高記録更新時のアニメーション */
-        @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 0 10px rgba(253, 224, 71, 0.7), 0 0 20px rgba(253, 224, 71, 0.5);
-            }
-            50% {
-                box-shadow: 0 0 20px rgba(253, 224, 71, 1), 0 0 40px rgba(253, 224, 71, 0.8);
-            }
-        }
-        .animate-pulse-strong {
-            animation: pulse 1.5s infinite;
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb; /* 明るい背景 */
         }
     </style>
 </head>
-<body class="p-4 flex items-center justify-center min-h-screen">
+<body class="min-h-screen flex items-center justify-center p-4">
 
-    <div id="app" class="container bg-card shadow-2xl rounded-xl p-6 md:p-8 w-full">
-        <h1 class="text-3xl font-bold text-center text-primary mb-6">
-            九九トレーニング (6, 7, 8の段)
-        </h1>
-        <p class="text-center text-gray-600 mb-6">
-            全5問。6の段、7の段、8の段からランダムに出題されます。
-        </p>
+    <!-- ユーザー名入力モーダル (初期表示はhidden) -->
+    <div id="username-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center hidden">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm space-y-4">
+            <h2 class="text-2xl font-bold text-indigo-700 text-center">ハンドルネームを登録</h2>
+            <p class="text-gray-600 text-sm text-center">記録を保存するために、名前を教えてね！</p>
+            <input 
+                type="text" 
+                id="username-input" 
+                class="w-full p-3 border-2 border-indigo-300 rounded-lg text-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                placeholder="例: たろう"
+                maxlength="10"
+                onkeypress="if(event.key === 'Enter') saveUserName();"
+            >
+            <button 
+                id="save-username-button" 
+                class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-200"
+                onclick="saveUserName()"
+            >
+                登録してスタート
+            </button>
+        </div>
+    </div>
+
+    <!-- メインアプリケーションコンテナ -->
+    <div id="app" class="w-full max-w-lg bg-white shadow-xl rounded-2xl p-6 md:p-10 border border-gray-100 transition duration-500">
         
-        <!-- ハンドルネーム入力エリア -->
-        <div id="nameInputArea" class="mb-6 p-4 bg-gray-100 rounded-lg shadow-inner">
-            <p class="text-sm font-semibold text-gray-700 mb-2">ハンドルネームを登録してください:</p>
-            <div class="flex space-x-2">
-                <input type="text" id="nicknameInput" maxlength="12" placeholder="ニックネーム (12文字以内)"
-                       class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                <button id="registerButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out shadow-md">
-                    登録
+        <!-- ユーザー名表示エリア -->
+        <div class="text-right text-sm text-gray-500 mb-2">
+            ユーザー: <span id="username-display" class="font-semibold text-indigo-500">読み込み中...</span>
+        </div>
+        
+        <h1 class="text-3xl font-extrabold text-center text-indigo-700 mb-6">めざせ！九九マスター 6・7・8の段チャレンジ</h1>
+        <p class="text-center text-gray-500 mb-8">全5問です。がんばってね！</p>
+
+        <!-- ゲームプレイエリア -->
+        <div id="game-area" class="space-y-6">
+            
+            <!-- 問題表示エリア -->
+            <div id="question-display" class="hidden text-center">
+                <p id="question-number" class="text-sm font-semibold text-gray-400 mb-2"></p>
+                <div class="flex items-center justify-center space-x-4 bg-indigo-50 p-6 rounded-xl shadow-inner">
+                    <span id="multiplier1" class="text-5xl font-bold text-indigo-900">?</span>
+                    <span class="text-4xl text-indigo-600">×</span>
+                    <span id="multiplier2" class="text-5xl font-bold text-indigo-900">?</span>
+                    <span class="text-4xl text-indigo-600">=</span>
+                    <span class="text-4xl text-gray-400">?</span>
+                </div>
+            </div>
+
+            <!-- 回答入力とボタンエリア -->
+            <div id="answer-area" class="hidden space-y-4">
+                <input 
+                    type="number" 
+                    id="answer-input" 
+                    class="w-full text-center text-3xl p-3 border-2 border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out" 
+                    placeholder="答えを入力"
+                    min="1"
+                    max="81"
+                    onkeypress="if(event.key === 'Enter') checkAnswer();"
+                >
+                <button 
+                    id="submit-button" 
+                    class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-200"
+                    onclick="checkAnswer()"
+                >
+                    回答する
                 </button>
             </div>
-            <p id="nicknameDisplay" class="text-center mt-2 text-indigo-700 font-bold hidden"></p>
-        </div>
 
-        <!-- 最高記録表示エリア (初期状態から表示) -->
-        <div class="text-center mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-            <p class="text-sm font-semibold text-gray-600">最高記録 (最短時間):</p>
-            <p id="bestTimeText" class="text-2xl font-extrabold text-indigo-700">---</p>
-            <p id="bestTimeOwner" class="text-base text-indigo-500 mt-1">プレイヤー: ---</p>
-        </div>
+            <!-- フィードバックメッセージ (回答エリアから分離し、常に表示されるように変更) -->
+            <div id="feedback" class="h-8 text-center text-lg font-semibold transition duration-300"></div>
 
-        <!-- スタートボタン -->
-        <button id="startButton" class="w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out shadow-lg transform hover:scale-[1.01]">
-            <svg class="w-5 h-5 inline mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.26c0 .779.824 1.257 1.403.872l3.197-2.132a1 1 0 000-1.744z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            トレーニング開始
-        </button>
-
-        <!-- 問題表示エリア -->
-        <div id="quizArea" class="hidden mt-8 space-y-4">
-            <h2 class="text-xl font-semibold text-gray-800 border-b pb-2 mb-4">問題</h2>
-            <div id="questionsContainer" class="space-y-4">
-                <!-- 問題はJavaScriptで挿入される -->
+            <!-- スタート/結果エリア -->
+            <div id="start-area" class="text-center">
+                <button 
+                    id="start-button" 
+                    class="w-full py-4 bg-green-500 text-white text-xl font-extrabold rounded-xl shadow-lg hover:bg-green-600 transition duration-200"
+                    onclick="startGame()"
+                    disabled
+                >
+                    練習開始！
+                </button>
             </div>
             
-            <!-- 答え合わせボタン -->
-            <button id="submitButton" class="w-full bg-primary hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg mt-6 transition duration-150 ease-in-out shadow-lg">
-                答え合わせ
-            </button>
         </div>
 
-        <!-- 結果表示エリア -->
-        <div id="resultArea" class="hidden mt-8 bg-indigo-50 p-6 rounded-lg border-2 border-indigo-200">
-            <h2 class="text-2xl font-bold text-primary mb-4 text-center">結果</h2>
-            
-            <!-- 経過時間表示 -->
-            <p class="text-lg font-medium text-gray-700 text-center">経過時間:</p>
-            <p id="timeText" class="text-4xl font-extrabold text-primary mb-4 text-center">0.00秒</p>
-
-            <!-- 最高記録更新メッセージ -->
-            <div id="celebrationMessage" class="hidden text-center mb-6 p-4 bg-yellow-100 border-4 border-yellow-400 rounded-xl shadow-xl animate-pulse-strong">
-                <p class="text-2xl font-black text-yellow-700">🏆✨ 最高記録更新！おめでとう！ ✨🏆</p>
-            </div>
-
-            <p id="scoreText" class="text-xl text-center font-extrabold mb-4"></p>
-            
-            <h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-4 mb-3">詳細</h3>
-            <div id="summaryContainer" class="space-y-3">
-                <!-- 個別の結果はJavaScriptで挿入される -->
-            </div>
-            
-            <button id="resetButton" class="w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg mt-6 transition duration-150 ease-in-out shadow-lg">
-                もう一度挑戦する
-            </button>
+        <!-- スコア表示 -->
+        <div id="score-status" class="mt-8 pt-4 border-t border-gray-200 text-sm flex justify-between">
+            <p id="current-score" class="font-semibold text-gray-700">正解数: 0 / 0</p>
+            <p id="current-question" class="font-semibold text-gray-700">残り: 0 問</p>
         </div>
         
-        <!-- リセットボタンと確認モーダル -->
-        <div class="mt-8 pt-4 border-t border-gray-200">
-            <button id="showResetModalButton" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out shadow-md">
-                全データ初期化 (パスワード要)
-            </button>
+        <!-- 時間計測と最高記録の表示エリアを追加 -->
+        <div id="record-display" class="mt-4 pt-4 border-t border-gray-200 text-sm space-y-2">
+            <!-- 個人の今回の記録 -->
+            <p id="time-taken" class="font-bold text-gray-800">今回の回答時間: --</p>
+            
+            <!-- 個人の最高記録とリセットボタン群 -->
+            <p id="personal-best-container" class="font-bold text-green-600 flex justify-between items-center">
+                <span id="best-record-personal">個人の最高記録 (5問): </span>
+                <span class="space-x-2 flex">
+                    <!-- 記録のみリセット -->
+                    <button 
+                        onclick="showResetPrompt('record')" 
+                        class="text-xs text-red-500 hover:text-red-700 font-normal py-1 px-2 rounded-lg border border-red-300 bg-red-50 transition duration-150 whitespace-nowrap"
+                    >
+                        記録のみリセット
+                    </button>
+                    <!-- すべてリセット -->
+                    <button 
+                        onclick="showResetPrompt('all')" 
+                        class="text-xs text-red-700 hover:text-red-900 font-bold py-1 px-2 rounded-lg border border-red-500 bg-red-200 transition duration-150 whitespace-nowrap"
+                    >
+                        すべてリセット (名前も)
+                    </button>
+                </span>
+            </p>
+
+            <!-- パスワード入力エリア (最初は非表示) -->
+            <div id="reset-password-area" class="hidden mt-4 p-3 bg-red-50 border border-red-300 rounded-lg space-y-2">
+                <p id="reset-prompt-title" class="text-red-700 font-semibold text-center">記録をリセットするにはパスワードを入力してください。</p>
+                <input 
+                    type="password" 
+                    id="password-input" 
+                    class="w-full p-2 border border-red-300 rounded text-base text-gray-800 focus:ring-red-500 focus:border-red-500" 
+                    placeholder="パスワードを入力"
+                    onkeypress="if(event.key === 'Enter') confirmReset();"
+                >
+                <div class="flex justify-end space-x-2">
+                    <button 
+                        onclick="hideResetPrompt()" 
+                        class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    >
+                        キャンセル
+                    </button>
+                    <button 
+                        onclick="confirmReset()" 
+                        id="reset-execute-button"
+                        class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                        リセット実行
+                    </button>
+                    <input type="hidden" id="reset-mode" value="">
+                </div>
+            </div>
+
+            <!-- 全体の最高記録リストを追加 -->
+            <div class="pt-4 border-t border-gray-200">
+                <h3 class="text-lg font-bold text-indigo-700 mb-2">🏆 全体の最高記録 (トップ5)</h3>
+                <ul id="global-records-list" class="space-y-1">
+                    <li class="text-gray-500">記録を読み込み中...</li>
+                </ul>
+            </div>
         </div>
 
     </div>
 
-    <!-- パスワード確認モーダル (簡易版) -->
-    <div id="resetModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-xs">
-            <h3 class="text-lg font-bold mb-4 text-red-600">⚠ データ初期化</h3>
-            <p class="mb-4 text-sm text-gray-700">最高記録とニックネームをすべて初期化します。操作を続けるには**パスワード**を入力してください。</p>
-            <input type="password" id="resetPasswordInput" placeholder="パスワードを入力"
-                   class="w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 mb-2">
-            <p id="resetErrorMessage" class="text-sm text-red-500 mb-4 hidden">パスワードが違います。</p>
-            <div class="flex justify-end space-x-2">
-                <button id="cancelResetButton" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-                    キャンセル
-                </button>
-                <button id="confirmResetButton" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
-                    実行
-                </button>
-            </div>
-        </div>
-    </div>
-
-
-    <!-- Firebase SDKsのインポートとアプリロジック -->
+    <!-- Firebase SDKの読み込み (module type) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // グローバル変数
-        const QUESTION_COUNT = 5; // 出題数
-        let questions = [];      // 出題リストを格納
-        let currentAnswers = []; // ユーザーの解答を格納
-        let startTime = 0;       // 計測開始時刻 (ms)
-        let currentNickname = "名無し"; // 現在のユーザーのニックネーム
-
-        // Firestore/Auth 関連
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        let app, db, auth;
-        let userId = null;
-        let isAuthReady = false;
-        let bestTimeMs = Infinity; // 最高記録（ミリ秒, 初期値は無限大）
-        let bestTimeOwnerNickname = "未登録"; // 最高記録保持者のニックネーム
-
-        // DOM要素の取得
-        const startButton = document.getElementById('startButton');
-        const quizArea = document.getElementById('quizArea');
-        const resultArea = document.getElementById('resultArea');
-        const questionsContainer = document.getElementById('questionsContainer');
-        const submitButton = document.getElementById('submitButton');
-        const scoreText = document.getElementById('scoreText');
-        const summaryContainer = document.getElementById('summaryContainer');
-        const resetButton = document.getElementById('resetButton');
+        // Firestoreのログレベルを設定 (デバッグ用)
+        setLogLevel('Debug');
         
-        // タイム計測関連のDOM要素
-        const timeText = document.getElementById('timeText');
-        const bestTimeText = document.getElementById('bestTimeText');
-        const celebrationMessage = document.getElementById('celebrationMessage');
+        // グローバル変数を参照できるように window にアタッチ
+        window.DANS = [6, 7, 8];
+        window.MAX_QUESTIONS = 5;
+        window.NEXT_QUESTION_DELAY = 800;
+        window.RESET_PASSWORD = 'shinai';
 
-        // ニックネーム関連のDOM要素
-        const nicknameInput = document.getElementById('nicknameInput');
-        const registerButton = document.getElementById('registerButton');
-        const nicknameDisplay = document.getElementById('nicknameDisplay');
-        const bestTimeOwner = document.getElementById('bestTimeOwner');
+        window.questions = [];
+        window.currentQuestionIndex = 0;
+        window.score = 0;
+        window.startTime = 0;
+        window.timeTaken = 0;
+        window.bestTime = Infinity;
+
+        // Firebase / Context Variables
+        window.db = null;
+        window.auth = null;
+        window.userId = null;
+        window.userName = null;
         
-        // リセット機能関連のDOM要素 (新規追加)
-        const showResetModalButton = document.getElementById('showResetModalButton');
-        const resetModal = document.getElementById('resetModal');
-        const resetPasswordInput = document.getElementById('resetPasswordInput');
-        const cancelResetButton = document.getElementById('cancelResetButton');
-        const confirmResetButton = document.getElementById('confirmResetButton');
-        const resetErrorMessage = document.getElementById('resetErrorMessage');
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const FIREBASE_CONFIG = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firestoreパス生成ヘルパー関数
+        const getUserProfileRef = (uid) => doc(window.db, `artifacts/${APP_ID}/users/${uid}/settings`, 'profile');
+        // 個人最高記録 (プライベート)
+        const getPersonalBestTimeRef = (uid) => doc(window.db, `artifacts/${APP_ID}/users/${uid}/kuku_records`, 'best_time');
+        // 公開記録 (パブリック - ユーザーIDをドキュメントIDとする)
+        const getGlobalRecordRef = (uid) => doc(window.db, `artifacts/${APP_ID}/public/data/kuku_global_records`, uid);
+        const getGlobalRecordsCollection = () => collection(window.db, `artifacts/${APP_ID}/public/data/kuku_global_records`);
+
+        // DOM要素
+        const usernameModalEl = document.getElementById('username-modal');
+        const usernameInputEl = document.getElementById('username-input');
+        const usernameDisplayEl = document.getElementById('username-display');
+        const startButtonEl = document.getElementById('start-button');
+        const feedbackEl = document.getElementById('feedback');
+        const personalBestEl = document.getElementById('best-record-personal');
+        const globalRecordsListEl = document.getElementById('global-records-list');
+        const passwordInputEl = document.getElementById('password-input');
+        const resetPasswordAreaEl = document.getElementById('reset-password-area');
+        const resetPromptTitleEl = document.getElementById('reset-prompt-title');
+        const resetModeInputEl = document.getElementById('reset-mode');
 
 
-        // --- Firebase/Firestore 関連関数 ---
+        // --- Firebase/Auth/Firestore Logic ---
 
-        /**
-         * Firebaseの初期化と認証を行う
-         */
-        async function initFirebaseAndAuth() {
+        async function loadUserProfile() {
+            if (!window.db || !window.userId) return;
+
+            const profileSnap = await getDoc(getUserProfileRef(window.userId));
+            if (profileSnap.exists()) {
+                window.userName = profileSnap.data().name;
+                usernameDisplayEl.textContent = window.userName;
+                usernameModalEl.classList.add('hidden');
+                startButtonEl.disabled = false; // 名前がロードされたらスタート可能
+                await loadBestRecord(); // 名前が確定したら記録をロード
+            } else {
+                // プロフィールがない場合、モーダルを表示して入力を求める
+                window.userName = null;
+                usernameDisplayEl.textContent = '未登録';
+                usernameModalEl.classList.remove('hidden');
+            }
+        }
+
+        async function loadBestRecord() {
+            if (!window.db || !window.userId) return;
+
+            // 1. 個人の最高記録をロード (プライベート)
             try {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
+                const docRef = getPersonalBestTimeRef(window.userId);
+                const docSnap = await getDoc(docRef);
 
-                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-                if (token) {
-                    await signInWithCustomToken(auth, token);
+                if (docSnap.exists()) {
+                    window.bestTime = docSnap.data().time || Infinity;
                 } else {
-                    // __initial_auth_tokenがない場合は匿名認証
-                    await signInAnonymously(auth);
+                    window.bestTime = Infinity;
                 }
+                
+                // 表示を更新 (個人の記録には自分の名前を表示)
+                const nameDisplay = window.userName ? ` (${window.userName})` : '';
+                personalBestEl.textContent = `個人の最高記録 (5問): ${formatTime(window.bestTime)}${nameDisplay}`;
+            } catch (error) {
+                console.error("Error loading personal best record:", error);
+                window.bestTime = Infinity;
+                personalBestEl.textContent = `個人の最高記録 (5問): -- (読み込みエラー)`;
+            }
 
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                        console.log("Firebase Auth Ready. User ID:", userId);
-                        loadUserData(); // 認証完了後にユーザーデータと最高記録をロード
-                    } else {
-                        // 匿名認証に失敗した場合のフォールバック
-                        userId = null;
-                        isAuthReady = true;
-                        loadUserData(); 
+            // 2. 全体の最高記録をロード (パブリック)
+            await loadGlobalRecords();
+        }
+
+        async function loadGlobalRecords() {
+            if (!window.db) return;
+            globalRecordsListEl.innerHTML = '<li class="text-gray-500">記録を読み込み中...</li>';
+
+            try {
+                // NOTE: FirestoreのorderByは利用せず、JavaScriptでソートするように修正
+                const q = query(getGlobalRecordsCollection());
+                
+                const querySnapshot = await getDocs(q);
+                let records = [];
+
+                if (querySnapshot.empty) {
+                    globalRecordsListEl.innerHTML = '<li class="text-gray-500">まだ記録がありません。一番を目指そう！</li>';
+                    return;
+                }
+                
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.time && data.time !== Infinity) {
+                        records.push({
+                            id: doc.id,
+                            time: data.time,
+                            userName: data.userName || '匿名'
+                        });
                     }
+                });
+                
+                // JavaScriptで時間 (time) の昇順にソートし、トップ5に限定
+                records.sort((a, b) => a.time - b.time);
+                const topRecords = records.slice(0, 5);
+
+                globalRecordsListEl.innerHTML = ''; // リストをクリア
+                
+                topRecords.forEach((record, index) => {
+                    const rank = index + 1;
+                    const time = formatTime(record.time);
+                    const name = record.userName;
+                    const isCurrentUser = record.id === window.userId;
+
+                    const listItem = document.createElement('li');
+                    listItem.className = `p-1 rounded flex justify-between items-center ${isCurrentUser ? 'bg-yellow-100 font-semibold' : 'text-gray-700'}`;
+                    
+                    // 名前と時間を分けて表示し、名前の表示エリアを確保
+                    listItem.innerHTML = `
+                        <span class="text-lg w-5 mr-2">${rank}.</span>
+                        <span class="flex-grow truncate text-sm text-gray-900">${name}</span>
+                        <span class="${isCurrentUser ? 'text-indigo-600' : 'text-gray-900'} font-extrabold ml-2">${time}</span>
+                    `;
+                    globalRecordsListEl.appendChild(listItem);
                 });
 
             } catch (error) {
-                console.error("Firebase Initialization or Authentication Error:", error);
-                isAuthReady = true;
-                loadUserData();
-            }
-        }
-
-        /**
-         * ユーザーデータ (ニックネーム) と最高記録をロードする
-         */
-        async function loadUserData() {
-            if (!isAuthReady || !userId) {
-                updateNicknameDisplay();
-                updateBestTimeDisplay();
-                return;
-            }
-
-            // ユーザーデータ (ニックネーム) のロード
-            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
-            const userDocRef = doc(db, userDocPath);
-            try {
-                const docSnap = await getDoc(userDocRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (data.nickname) {
-                        currentNickname = data.nickname;
-                        console.log("Loaded Nickname:", currentNickname);
-                    }
-                }
-            } catch (e) {
-                console.error("Error loading user profile:", e);
-            }
-            updateNicknameDisplay();
-
-            // 最高記録のロード (Firestoreでは全ユーザーの最高記録を単一の場所に保存し、ロードします)
-            loadHighScore();
-        }
-
-        /**
-         * Firestoreから全ユーザーの最高記録（最短時間）を取得する
-         */
-        async function loadHighScore() {
-            // パブリックデータパス: /artifacts/{appId}/public/data/multiplication_best_time/record
-            const docPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
-            const docRef = doc(db, docPath);
-
-            try {
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (data.bestTime && typeof data.bestTime === 'number') {
-                        bestTimeMs = data.bestTime;
-                        bestTimeOwnerNickname = data.nickname || "名無し";
-                        console.log("Loaded Global Best Time:", bestTimeMs, "Owner:", bestTimeOwnerNickname);
-                    }
-                }
-            } catch (e) {
-                console.error("Error loading global high score:", e);
-            }
-            updateBestTimeDisplay();
-        }
-
-        /**
-         * Firestoreに最高記録（最短時間）とニックネームを保存する
-         * @param {number} newBestTimeMs 新しい最高記録（ミリ秒）
-         * @param {string} nickname 記録を達成したユーザーのニックネーム
-         */
-        async function saveHighScore(newBestTimeMs, nickname) {
-            if (!isAuthReady || !userId) {
-                console.warn("Auth not ready or User ID not available for saving high score.");
-                return;
-            }
-
-            // 全ユーザー共有の最高記録として保存
-            const docPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
-            const docRef = doc(db, docPath);
-
-            try {
-                await setDoc(docRef, { 
-                    bestTime: newBestTimeMs, 
-                    nickname: nickname, // ニックネームを保存
-                    userId: userId,     // 誰が達成したかも保存（オプション）
-                    updatedAt: Date.now() 
-                });
-                bestTimeMs = newBestTimeMs;
-                bestTimeOwnerNickname = nickname;
-                console.log("Global High Score saved successfully:", newBestTimeMs, "by", nickname);
-                updateBestTimeDisplay();
-            } catch (e) {
-                console.error("Error saving high score:", e);
+                console.error("Error loading global records:", error);
+                globalRecordsListEl.innerHTML = '<li class="text-red-500">全体記録の読み込み中にエラーが発生しました。</li>';
             }
         }
         
-        /**
-         * Firestoreに現在のユーザーのニックネームを保存する
-         * @param {string} nickname 登録するニックネーム
-         */
-        async function saveNickname(nickname) {
-            if (!isAuthReady || !userId) {
-                console.warn("Auth not ready. Cannot save nickname.");
-                return;
-            }
-            
-            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
-            const userDocRef = doc(db, userDocPath);
-
-            try {
-                await setDoc(userDocRef, { nickname: nickname, updatedAt: Date.now() });
-                currentNickname = nickname;
-                updateNicknameDisplay();
-                console.log("Nickname saved:", nickname);
-            } catch (e) {
-                console.error("Error saving nickname:", e);
-            }
-        }
-
-        /**
-         * すべての登録者（最高記録）と個人のニックネームを初期化する
-         */
-        async function resetAllData() {
-            if (!isAuthReady || !userId) {
-                console.error("Auth not ready. Cannot reset data.");
+        window.saveUserName = async function() {
+            const name = usernameInputEl.value.trim();
+            if (name.length < 1) {
+                feedbackEl.textContent = '名前を入力してください。';
+                feedbackEl.classList.add('text-red-600');
                 return;
             }
 
-            // 1. グローバルな最高記録を初期化
-            const globalDocPath = `/artifacts/${appId}/public/data/multiplication_best_time/record`;
-            const globalDocRef = doc(db, globalDocPath);
+            if (!window.db || !window.userId) {
+                console.error("Database not initialized.");
+                return;
+            }
 
             try {
-                await setDoc(globalDocRef, { 
-                    bestTime: Infinity, 
-                    nickname: "未登録", 
-                    userId: null, 
-                    updatedAt: Date.now() 
-                });
-                console.log("Global High Score reset successfully.");
-            } catch (e) {
-                console.error("Error resetting global high score:", e);
+                await setDoc(getUserProfileRef(window.userId), { name: name });
+                window.userName = name;
+                usernameDisplayEl.textContent = name;
+                usernameModalEl.classList.add('hidden');
+                startButtonEl.disabled = false;
+                feedbackEl.textContent = `${name}さん、ようこそ！準備ができたら練習開始！`;
+                feedbackEl.classList.remove('text-red-600');
+                feedbackEl.classList.add('text-indigo-500');
+                await loadBestRecord(); // 個人記録と全体記録をロード
+            } catch (error) {
+                console.error("Error saving username:", error);
+                feedbackEl.textContent = '登録に失敗しました。時間をおいて再度お試しください。';
+                feedbackEl.classList.add('text-red-600');
             }
+        }
 
-            // 2. 現在のユーザーのニックネームを初期化
-            const userDocPath = `/artifacts/${appId}/users/${userId}/profile/data`;
-            const userDocRef = doc(db, userDocPath);
-
+        /**
+         * 記録のみをリセットする (名前は残す)
+         */
+        async function resetRecordOnly() {
+            if (!window.db || !window.userId) return;
+            
             try {
-                // ニックネームを初期値 ("名無し") で上書き
-                await setDoc(userDocRef, { nickname: "名無し", updatedAt: Date.now() });
-                currentNickname = "名無し";
-                console.log("Current user nickname reset successfully.");
-            } catch (e) {
-                console.error("Error resetting user nickname:", e);
+                // 1. 個人の記録を削除 (プライベート)
+                await deleteDoc(getPersonalBestTimeRef(window.userId));
+                // 2. 公開記録を削除 (パブリック)
+                await deleteDoc(getGlobalRecordRef(window.userId));
+                
+                window.bestTime = Infinity;
+                await loadBestRecord(); // 表示を更新 (loadBestRecord内でloadGlobalRecordsも呼び出される)
+
+                feedbackEl.textContent = '記録のみをリセットしました。また頑張ろう！';
+                feedbackEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600', 'text-indigo-500');
+                feedbackEl.classList.add('text-red-500');
+            } catch (error) {
+                console.error("Error resetting record:", error);
+                feedbackEl.textContent = 'リセットに失敗しました。';
+                feedbackEl.classList.add('text-red-600');
             }
+            hideResetPrompt();
+        }
+
+        /**
+         * 名前と記録をすべてリセットする
+         */
+        async function resetNameAndRecord() {
+            if (!window.db || !window.userId) return;
             
-            // 3. UIの状態をリセット
-            resetModal.classList.add('hidden');
-            resetPasswordInput.value = '';
+            try {
+                // 1. 個人の記録を削除 (プライベート)
+                await deleteDoc(getPersonalBestTimeRef(window.userId));
+                // 2. 公開記録を削除 (パブリック)
+                await deleteDoc(getGlobalRecordRef(window.userId));
+                // 3. プロフィールを削除 (名前もリセット)
+                await deleteDoc(getUserProfileRef(window.userId));
+                
+                window.bestTime = Infinity;
+                window.userName = null;
+
+                // 記録とプロフィールが消去されたため、強制的に再ロードして名前登録モーダルを再表示
+                hideResetPrompt();
+                startButtonEl.disabled = true;
+                await loadUserProfile(); // プロフィールが消えているため、名前登録モーダルが表示される
+
+                feedbackEl.textContent = 'すべてのデータをリセットしました。名前を再登録してください。';
+                feedbackEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600', 'text-indigo-500');
+                feedbackEl.classList.add('text-red-500');
+            } catch (error) {
+                console.error("Error resetting all data:", error);
+                feedbackEl.textContent = 'リセットに失敗しました。';
+                feedbackEl.classList.add('text-red-600');
+            }
+        }
+
+
+        function initFirebase() {
+            if (!FIREBASE_CONFIG.apiKey) {
+                console.error("Firebase configuration is missing.");
+                usernameDisplayEl.textContent = 'エラー';
+                return;
+            }
+            const app = initializeApp(FIREBASE_CONFIG);
+            window.db = getFirestore(app);
+            window.auth = getAuth(app);
+
+            onAuthStateChanged(window.auth, async (user) => {
+                if (user) {
+                    window.userId = user.uid;
+                    console.log("Firebase initialized. User ID:", window.userId);
+                    await loadUserProfile();
+                } else {
+                    usernameDisplayEl.textContent = '認証中...';
+                    console.log("No user signed in. Attempting sign-in.");
+                    try {
+                        if (INITIAL_AUTH_TOKEN) {
+                            await signInWithCustomToken(window.auth, INITIAL_AUTH_TOKEN);
+                        } else {
+                            await signInAnonymously(window.auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                        usernameDisplayEl.textContent = '認証エラー';
+                    }
+                }
+            });
+        }
+
+        // --- Utility Functions (Globalized for access from HTML) ---
+
+        window.formatTime = function(ms) {
+            if (ms === Infinity || ms === null) return '未登録';
+            return (ms / 1000).toFixed(2) + '秒';
+        }
+
+        window.showResetPrompt = function(mode) {
+            resetModeInputEl.value = mode;
+            resetPasswordAreaEl.classList.remove('hidden');
+            passwordInputEl.value = ''; 
+            passwordInputEl.focus();
+
+            if (mode === 'all') {
+                resetPromptTitleEl.textContent = '【警告】名前と記録をすべて消去します。パスワードを入力してください。';
+            } else {
+                resetPromptTitleEl.textContent = '記録（タイム）のみをリセットします。パスワードを入力してください。';
+            }
+
+            feedbackEl.textContent = '記録リセットの確認が必要です。';
+            feedbackEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600', 'text-indigo-500');
+            feedbackEl.classList.add('text-red-500');
+        }
+
+        window.hideResetPrompt = function() {
+            resetPasswordAreaEl.classList.add('hidden');
+            passwordInputEl.value = '';
+            feedbackEl.textContent = 'リセットをキャンセルしました。';
+            feedbackEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600', 'text-red-500');
+            feedbackEl.classList.add('text-indigo-500');
+        }
+
+        window.confirmReset = function() {
+            const enteredPassword = passwordInputEl.value;
+            const mode = resetModeInputEl.value;
+
+            if (enteredPassword === window.RESET_PASSWORD) {
+                if (mode === 'all') {
+                    resetNameAndRecord();
+                } else {
+                    resetRecordOnly();
+                }
+            } else {
+                feedbackEl.textContent = '❌ パスワードが違います。';
+                feedbackEl.classList.remove('text-green-600', 'text-yellow-600', 'text-indigo-500');
+                feedbackEl.classList.add('text-red-600');
+                passwordInputEl.value = '';
+                passwordInputEl.focus();
+            }
+        }
+
+
+        // --- Game Logic ---
+
+        window.startGame = function() {
+            if (!window.userName) {
+                usernameModalEl.classList.remove('hidden');
+                return;
+            }
+
+            window.score = 0;
+            window.currentQuestionIndex = 0;
             
-            // 4. UI/データを再ロードして更新を反映
-            bestTimeMs = Infinity;
-            bestTimeOwnerNickname = "未登録";
-            resetApp(); 
-            // サーバーからのデータを再ロード
-            loadUserData();
+            // UIをリセット
+            feedbackEl.textContent = '';
+            document.getElementById('answer-input').value = '';
+            document.getElementById('answer-input').disabled = false;
+            document.getElementById('submit-button').disabled = false;
+            document.getElementById('time-taken').textContent = '今回の回答時間: --';
+            resetPasswordAreaEl.classList.add('hidden'); 
+
+            // 満点演出をリセット
+            document.getElementById('app').classList.remove('bg-yellow-50', 'shadow-2xl', 'shadow-yellow-400/50', 'transform', 'scale-105');
+            
+            // 画面の表示切り替え
+            document.getElementById('start-area').classList.add('hidden');
+            document.getElementById('question-display').classList.remove('hidden');
+            document.getElementById('answer-area').classList.remove('hidden');
+            
+            generateQuestions();
+            updateStatusDisplay();
+            showQuestion();
+            document.getElementById('answer-input').focus(); 
+
+            // タイマー開始
+            window.startTime = Date.now();
         }
 
-
-        // --- UI 更新関数 ---
-
-        /**
-         * ニックネーム入力/表示を更新する
-         */
-        function updateNicknameDisplay() {
-            if (currentNickname === "名無し" || currentNickname === null) {
-                nicknameDisplay.classList.add('hidden');
-                registerButton.textContent = '登録';
-                nicknameInput.value = '';
-            } else {
-                nicknameDisplay.textContent = `現在のプレイヤー: ${currentNickname}`;
-                nicknameDisplay.classList.remove('hidden');
-                nicknameInput.value = currentNickname;
-                registerButton.textContent = '更新';
-            }
-        }
-
-        /**
-         * 最高記録の表示を更新する
-         */
-        function updateBestTimeDisplay() {
-            if (bestTimeMs !== Infinity) {
-                const seconds = (bestTimeMs / 1000).toFixed(2);
-                bestTimeText.textContent = `${seconds}秒`;
-                bestTimeOwner.textContent = `プレイヤー: ${bestTimeOwnerNickname}`;
-            } else {
-                bestTimeText.textContent = '未登録';
-                bestTimeOwner.textContent = 'プレイヤー: ---';
-            }
-        }
-
-
-        // --- 九九アプリロジック（既存関数と新規関数） ---
-
-        /**
-         * 6, 7, 8の段の九九の問題をランダムに生成する (重複なし)
-         */
         function generateQuestions() {
-            const problems = [];
-            const multipliers = [6, 7, 8];
-            const generatedKeys = new Set(); // 既に生成された問題を格納するSet (例: "6x5", "7x1")
-            
-            while (problems.length < QUESTION_COUNT) {
-                // 段（6, 7, 8）をランダムに選択
-                const multiplierIndex = Math.floor(Math.random() * multipliers.length);
-                const multiplier = multipliers[multiplierIndex];
-
-                // かける数（1から9）をランダムに選択
-                const multiplicand = Math.floor(Math.random() * 9) + 1;
-
-                const key = `${multiplier}x${multiplicand}`;
-                
-                // 重複チェック
-                if (!generatedKeys.has(key)) {
-                    generatedKeys.add(key);
-                    
-                    problems.push({
-                        q: `${multiplier} × ${multiplicand} =`,
-                        answer: multiplier * multiplicand
-                    });
+            let allProblems = [];
+            window.DANS.forEach(dan => {
+                for (let kakeru = 1; kakeru <= 9; kakeru++) {
+                    allProblems.push({ dan, kakeru, answer: dan * kakeru });
                 }
-                
-                // 念のため、全問題数が少ない場合（3段 x 9 = 27通り）の無限ループ防止策
-                // 5問なので、通常は問題ないが、念のため
-                if (generatedKeys.size === multipliers.length * 9 && problems.length < QUESTION_COUNT) {
-                     // 全ての問題パターンが出たが、問題数がまだ満たされていない場合（ありえないが安全策として）
-                    break;
-                }
-            }
-            return problems;
-        }
-
-        /**
-         * 問題を画面にレンダリングする
-         */
-        function renderQuestions() {
-            questionsContainer.innerHTML = '';
-            currentAnswers = Array(questions.length).fill(null);
-
-            questions.forEach((q, index) => {
-                const questionElement = document.createElement('div');
-                questionElement.className = 'flex items-center space-x-4 bg-gray-50 p-4 rounded-lg shadow-sm';
-                questionElement.innerHTML = `
-                    <p class="text-lg font-medium w-1/3 text-gray-700">${index + 1}. ${q.q}</p>
-                    <input type="number" id="answer-${index}" data-index="${index}" placeholder="答え"
-                           class="answer-input w-2/3 p-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary text-lg text-center font-mono">
-                `;
-                questionsContainer.appendChild(questionElement);
-            });
-            
-            // 入力イベントリスナーを設定
-            document.querySelectorAll('.answer-input').forEach(input => {
-                input.addEventListener('input', handleAnswerInput);
-            });
-        }
-
-        /**
-         * ユーザーの解答を入力時に保存するハンドラ
-         */
-        function handleAnswerInput(event) {
-            const input = event.target;
-            const index = parseInt(input.dataset.index);
-            // 数値としてパース。空文字の場合はnullを格納
-            currentAnswers[index] = input.value === '' ? null : parseInt(input.value);
-        }
-
-        /**
-         * 答え合わせ処理
-         */
-        async function checkAnswers() {
-            const endTime = Date.now();
-            const elapsedTime = endTime - startTime; // 経過時間（ミリ秒）
-            let correctCount = 0;
-            summaryContainer.innerHTML = '';
-            celebrationMessage.classList.add('hidden'); // メッセージをリセット
-
-            // 1. 正誤判定と結果サマリーの生成
-            questions.forEach((q, index) => {
-                const userAnswer = currentAnswers[index];
-                const isCorrect = userAnswer === q.answer;
-                
-                if (isCorrect) {
-                    correctCount++;
-                }
-
-                // 結果サマリーの表示
-                const summaryItem = document.createElement('div');
-                summaryItem.className = `p-3 rounded-lg flex justify-between items-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`;
-                
-                const icon = isCorrect 
-                    ? `<svg class="w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
-                    : `<svg class="w-6 h-6 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
-
-                const detailText = isCorrect
-                    ? `正解！`
-                    : `間違い... 正解は ${q.answer}`;
-
-                const resultClass = isCorrect ? 'text-green-800' : 'text-red-800';
-
-                summaryItem.innerHTML = `
-                    <div class="flex items-center">
-                        <div class="mr-3">${icon}</div>
-                        <p class="font-semibold text-gray-800">${index + 1}. ${q.q}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm text-gray-600">あなたの答え: <span class="font-mono ${userAnswer === null ? 'text-gray-400' : 'font-bold'}">${userAnswer !== null ? userAnswer : '未入力'}</span></p>
-                        <p class="font-bold ${resultClass}">${detailText}</p>
-                    </div>
-                `;
-                summaryContainer.appendChild(summaryItem);
             });
 
-            // 2. スコアとタイムの表示
-            scoreText.textContent = `${QUESTION_COUNT}問中、${correctCount}問正解！`;
-            scoreText.className = `text-xl text-center font-extrabold mb-4 ${correctCount === QUESTION_COUNT ? 'text-secondary' : 'text-primary'}`;
-            
-            // タイム表示
-            const elapsedSeconds = (elapsedTime / 1000).toFixed(2);
-            timeText.textContent = `${elapsedSeconds}秒`;
-
-
-            // 3. 最高記録の更新チェック (全問正解かつ、現在のタイムが最高記録よりも速い場合)
-            if (correctCount === QUESTION_COUNT && elapsedTime < bestTimeMs) {
-                // 最高記録更新！
-                celebrationMessage.classList.remove('hidden');
-                // 登録されたニックネームを付けて保存
-                await saveHighScore(elapsedTime, currentNickname); 
+            for (let i = allProblems.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [allProblems[i], allProblems[j]] = [allProblems[j], allProblems[i]];
             }
 
-            // 4. 画面切り替え
-            quizArea.classList.add('hidden');
-            resultArea.classList.remove('hidden');
+            window.questions = allProblems.slice(0, window.MAX_QUESTIONS);
         }
 
-        /**
-         * アプリを初期状態に戻す
-         */
-        function resetApp() {
-            // 画面切り替え
-            startButton.classList.remove('hidden');
-            quizArea.classList.add('hidden');
-            resultArea.classList.add('hidden');
-            questionsContainer.innerHTML = '';
-            summaryContainer.innerHTML = '';
-            celebrationMessage.classList.add('hidden');
-            timeText.textContent = '0.00秒'; // タイム表示をリセット
+        function showQuestion() {
+            if (window.currentQuestionIndex < window.MAX_QUESTIONS) {
+                const q = window.questions[window.currentQuestionIndex];
+                
+                document.getElementById('question-number').textContent = `第 ${window.currentQuestionIndex + 1} 問 / 全 ${window.MAX_QUESTIONS} 問`;
+                document.getElementById('multiplier1').textContent = q.dan;
+                document.getElementById('multiplier2').textContent = q.kakeru;
 
-            updateBestTimeDisplay(); // 最高記録を再表示
-            updateNicknameDisplay(); // ニックネームを再表示
-        }
-
-
-        // --- イベントリスナー ---
-
-        startButton.addEventListener('click', () => {
-            questions = generateQuestions(); // 問題を生成
-            renderQuestions();                // 問題をレンダリング
-            startTime = Date.now();           // タイマーをスタート
-
-            // 画面切り替え
-            startButton.classList.add('hidden');
-            quizArea.classList.remove('hidden');
-            resultArea.classList.add('hidden');
-        });
-
-        submitButton.addEventListener('click', checkAnswers);
-
-        resetButton.addEventListener('click', resetApp);
-        
-        registerButton.addEventListener('click', () => {
-            const nickname = nicknameInput.value.trim();
-            if (nickname.length > 0) {
-                saveNickname(nickname);
+                document.getElementById('answer-input').value = '';
+                feedbackEl.textContent = '';
             } else {
-                console.error("ニックネームを入力してください。");
+                endGame();
             }
-        });
-        
-        // リセット機能のイベントリスナー
-        showResetModalButton.addEventListener('click', () => {
-            resetModal.classList.remove('hidden');
-            resetPasswordInput.focus();
-        });
+        }
 
-        cancelResetButton.addEventListener('click', () => {
-            resetModal.classList.add('hidden');
-            resetPasswordInput.value = '';
-            resetErrorMessage.classList.add('hidden');
-        });
+        window.checkAnswer = function() { 
+            if (window.currentQuestionIndex >= window.MAX_QUESTIONS) return;
 
-        confirmResetButton.addEventListener('click', () => {
-            const password = resetPasswordInput.value;
-            resetErrorMessage.classList.add('hidden'); // エラーメッセージをリセット
-            if (password === 'shinai') {
-                resetAllData();
+            const userAnswer = parseInt(document.getElementById('answer-input').value, 10);
+            const currentQ = window.questions[window.currentQuestionIndex];
+            const correctAnswer = currentQ.answer;
+
+            if (isNaN(userAnswer)) {
+                feedbackEl.textContent = '答えを入力してください。';
+                feedbackEl.classList.remove('text-green-600', 'text-red-600');
+                feedbackEl.classList.add('text-yellow-600');
+                return;
+            }
+
+            document.getElementById('answer-input').disabled = true;
+            document.getElementById('submit-button').disabled = true;
+
+            if (userAnswer === correctAnswer) {
+                window.score++;
+                feedbackEl.textContent = '⭕ 正解！';
+                feedbackEl.classList.remove('text-red-600', 'text-yellow-600');
+                feedbackEl.classList.add('text-green-600');
             } else {
-                resetErrorMessage.classList.remove('hidden'); // エラーメッセージを表示
-                resetPasswordInput.value = ''; // パスワードをクリア
+                feedbackEl.textContent = `❌ 不正解... 正しい答えは ${correctAnswer} でした。`;
+                feedbackEl.classList.remove('text-green-600', 'text-yellow-600');
+                feedbackEl.classList.add('text-red-600');
             }
+            
+            updateStatusDisplay();
+
+            setTimeout(() => {
+                window.currentQuestionIndex++;
+                document.getElementById('answer-input').disabled = false;
+                document.getElementById('submit-button').disabled = false;
+                if (window.currentQuestionIndex < window.MAX_QUESTIONS) {
+                    showQuestion();
+                    document.getElementById('answer-input').focus();
+                } else {
+                    endGame();
+                }
+            }, window.NEXT_QUESTION_DELAY);
+        }
+
+        function updateStatusDisplay() {
+            document.getElementById('current-score').textContent = `正解数: ${window.score} / ${window.currentQuestionIndex}`;
+            const remaining = window.MAX_QUESTIONS - window.currentQuestionIndex;
+            document.getElementById('current-question').textContent = `残り: ${remaining < 0 ? 0 : remaining} 問`;
+        }
+
+        async function endGame() {
+            document.getElementById('question-display').classList.add('hidden');
+            document.getElementById('answer-area').classList.add('hidden');
+            document.getElementById('start-area').classList.remove('hidden');
+            
+            if (window.currentQuestionIndex === window.MAX_QUESTIONS) {
+                window.timeTaken = Date.now() - window.startTime;
+                document.getElementById('time-taken').textContent = `今回の回答時間: ${window.formatTime(window.timeTaken)}`;
+            } else {
+                document.getElementById('time-taken').textContent = '今回の回答時間: --';
+            }
+            
+            let resultMessage = `練習終了！ ${window.MAX_QUESTIONS} 問中 ${window.score} 問正解でした。`;
+            let resultColor = 'text-indigo-600';
+            
+            if (window.score === window.MAX_QUESTIONS) {
+                resultMessage = `🎉 ぜんもんせいかい！すごい！きみは九九マスターだね！⭐`;
+                resultColor = 'text-green-600';
+
+                let isNewRecord = false;
+                if (window.timeTaken > 0 && window.timeTaken < window.bestTime) {
+                    // 新記録達成！Firestoreに保存する
+                    try {
+                        const recordData = {
+                            time: window.timeTaken,
+                            timestamp: Date.now(),
+                            userName: window.userName || '匿名ユーザー',
+                            userId: window.userId
+                        };
+                        
+                        // 1. 個人記録を更新 (プライベート)
+                        await setDoc(getPersonalBestTimeRef(window.userId), recordData);
+                        
+                        // 2. 公開記録を更新 (パブリック - 他のユーザーも見れるように)
+                        await setDoc(getGlobalRecordRef(window.userId), recordData, { merge: true });
+
+                        window.bestTime = window.timeTaken;
+                        isNewRecord = true;
+                    } catch (error) {
+                        console.error("Failed to save new record to Firestore:", error);
+                    }
+                }
+                
+                await loadBestRecord(); // 個人記録と全体記録を再読み込み・表示更新
+                if (isNewRecord) {
+                    personalBestEl.textContent += ' ✨ NEW RECORD!';
+                    resultMessage += ' 🚀 新記録達成おめでとう！';
+                }
+
+                document.getElementById('app').classList.add('bg-yellow-50', 'shadow-2xl', 'shadow-yellow-400/50', 'transform', 'scale-105');
+                
+                setTimeout(() => {
+                    document.getElementById('app').classList.remove('bg-yellow-50', 'shadow-2xl', 'shadow-yellow-400/50', 'transform', 'scale-105');
+                }, 2000);
+            } else if (window.score >= window.MAX_QUESTIONS * 0.8) {
+                resultMessage += ' 素晴らしい！あと一息！';
+            } else {
+                resultMessage += ' 次は満点を目指して頑張ろう！';
+            }
+
+            feedbackEl.textContent = resultMessage;
+            feedbackEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600');
+            feedbackEl.classList.add(resultColor);
+            
+            document.getElementById('start-button').textContent = 'もう一度練習する';
+            updateStatusDisplay();
+        }
+
+
+        // 初期化処理
+        document.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+            updateStatusDisplay();
+            feedbackEl.textContent = 'データの読み込み中...';
+            feedbackEl.classList.add('text-indigo-500');
         });
-
-
-        // アプリ起動時の初期化
-        initFirebaseAndAuth(); // Firebaseの初期化と認証を開始
-        resetApp(); // UIを初期状態にする
-
     </script>
 </body>
 </html>
